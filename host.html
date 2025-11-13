@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Sports Hub - Host</title>
+<style>
+    body, html {
+        margin: 0;
+        padding: 0;
+        font-family: 'Segoe UI', sans-serif;
+        height: 100%;
+        background: linear-gradient(to bottom, #0ff, #000);
+        color: #fff;
+    }
+    .container { max-width: 900px; margin:auto; padding:20px; }
+    h1,h2 { text-align:center; text-shadow: 2px 2px #000; }
+    input,select,button { padding:10px; margin:10px 0; border-radius:8px; border:none; font-size:16px; }
+    button { cursor:pointer; background: cyan; color:black; font-weight:bold; transition:0.3s; }
+    button:hover { background:#00bcd4; color:white; }
+    .screen { display:none; }
+    .active { display:block; }
+    .player-list { margin-top:20px; }
+    .player-card {
+        display:flex;
+        align-items:center;
+        background: rgba(0,0,0,0.5);
+        border-radius:10px;
+        margin:10px 0;
+        padding:10px;
+    }
+    .player-card img { width:50px; height:50px; border-radius:50%; margin-right:15px; object-fit:cover; }
+    .sold { opacity:0.5; text-decoration:line-through; }
+    .owners-panel { display:flex; flex-wrap:wrap; gap:15px; justify-content:center; margin-top:20px; }
+    .owner-card { background: rgba(0,0,0,0.7); padding:15px; border-radius:12px; text-align:center; width:150px; box-shadow:0 0 10px #0ff; position:relative; }
+    .sold-popup { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#4caf50; color:white; padding:30px 50px; border-radius:15px; display:none; z-index:10; font-size:22px; text-align:center; box-shadow:0 0 20px #0ff; }
+    body::before {
+        content:"";
+        position:fixed;
+        top:0; left:0;
+        width:100%; height:100%;
+        background:url('https://i.ibb.co/0VG0kJ5/stadium.jpg') no-repeat center center/cover;
+        opacity:0.2;
+        z-index:-1;
+    }
+    .unsold-btn { margin-top:20px; padding:10px 20px; background:#f44336; color:white; font-weight:bold; border-radius:8px; }
+    .unsold-btn:hover { background:#d32f2f; }
+</style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="screen active">
+        <h1>The Sports Hub</h1>
+        <h2>Player Auction</h2>
+        <input type="text" id="hostUsername" placeholder="Username">
+        <input type="password" id="hostPassword" placeholder="Password">
+        <button onclick="loginHost()">Login</button>
+    </div>
+
+    <!-- Add Tournament Screen -->
+    <div id="tournamentScreen" class="screen">
+        <h2>Add Tournament</h2>
+        <input type="text" id="tournamentName" placeholder="Tournament Name">
+        <input type="number" id="totalTeams" placeholder="Total Teams/Owners">
+        <button onclick="saveTournament()">Done</button>
+    </div>
+
+    <!-- Add Players Screen -->
+    <div id="addPlayersScreen" class="screen">
+        <h2>Add Players</h2>
+        <input type="text" id="playerName" placeholder="Player Name">
+        <input type="file" id="playerImageFile" accept="image/*">
+        <input type="number" id="playerAge" placeholder="Player Age (Optional)">
+        <input type="text" id="playerRole" placeholder="Player Role (Optional)">
+        <input type="number" id="playerBasePrice" placeholder="Base Price (Optional)">
+        <button onclick="addPlayer()">Add Player</button>
+        <h3>Players Added:</h3>
+        <div id="playerList" class="player-list"></div>
+        <button onclick="goToAnnounce()">Go to Announce Player</button>
+    </div>
+
+    <!-- Announce Player Screen -->
+    <div id="announceScreen" class="screen">
+        <h2>Announce Player</h2>
+        <select id="playerDropdown"></select>
+        <button onclick="announcePlayer()">Announce</button>
+        <h3>Players:</h3>
+        <div id="announcedPlayers" class="player-list"></div>
+    </div>
+
+    <!-- Owner Panel Screen -->
+    <div id="ownerScreen" class="screen">
+        <h2>Owners Panel</h2>
+        <div class="owners-panel" id="ownersPanel"></div>
+        <button class="unsold-btn" onclick="markUnsold()">Mark Unsold</button>
+    </div>
+
+</div>
+
+<div id="soldPopup" class="sold-popup">Sold!</div>
+
+<script>
+let players = [];
+let announcedPlayers = [];
+let owners = [];
+let totalOwners = 0;
+let currentPlayer = null;
+
+// Login
+function loginHost(){ showScreen('tournamentScreen'); }
+function showScreen(screenId){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(screenId).classList.add('active');
+}
+
+// Tournament
+function saveTournament(){
+    totalOwners = parseInt(document.getElementById('totalTeams').value) || 2;
+    owners = [];
+    for(let i=1;i<=totalOwners;i++){ owners.push({name:`Team ${i}`, soldPlayers:[]}); }
+    showScreen('addPlayersScreen');
+}
+
+// Add Player
+function addPlayer(){
+    const name = document.getElementById('playerName').value || 'Unknown';
+    const imageFile = document.getElementById('playerImageFile').files[0];
+    const age = document.getElementById('playerAge').value;
+    const role = document.getElementById('playerRole').value;
+    const basePrice = document.getElementById('playerBasePrice').value;
+
+    const reader = new FileReader();
+    reader.onload = function(e){
+        const img = e.target.result;
+        players.push({name,img,age,role,basePrice,status:'pending'});
+        renderPlayerList();
+    }
+    if(imageFile){ reader.readAsDataURL(imageFile); }
+    else{ players.push({name,img:'https://via.placeholder.com/50',age,role,basePrice,status:'pending'}); renderPlayerList(); }
+
+    // clear
+    document.getElementById('playerName').value=''; document.getElementById('playerImageFile').value='';
+    document.getElementById('playerAge').value=''; document.getElementById('playerRole').value=''; document.getElementById('playerBasePrice').value='';
+}
+
+function renderPlayerList(){
+    const list = document.getElementById('playerList'); list.innerHTML='';
+    players.forEach(p=>{
+        const div = document.createElement('div'); div.classList.add('player-card');
+        div.innerHTML=`<img src="${p.img}"><div>${p.name} ${p.role? '('+p.role+')':''} - ${p.basePrice?('₹'+p.basePrice):''}</div>`;
+        list.appendChild(div);
+    });
+}
+
+// Announce
+function goToAnnounce(){
+    const dropdown = document.getElementById('playerDropdown'); dropdown.innerHTML='';
+    players.forEach((p,index)=>{
+        const option=document.createElement('option');
+        option.value=index; option.textContent=p.name;
+        dropdown.appendChild(option);
+    });
+    showScreen('announceScreen'); renderAnnouncedPlayers();
+}
+
+function announcePlayer(){
+    const index = document.getElementById('playerDropdown').value;
+    currentPlayer = players[index];
+    if(currentPlayer){
+        announcedPlayers.push(currentPlayer);
+        players.splice(index,1);
+        renderAnnouncedPlayers();
+        renderDropdown();
+        showOwnerPanel(currentPlayer);
+    }
+}
+
+function renderDropdown(){
+    const dropdown = document.getElementById('playerDropdown'); dropdown.innerHTML='';
+    players.forEach((p,index)=>{
+        const option=document.createElement('option'); option.value=index; option.textContent=p.name;
+        dropdown.appendChild(option);
+    });
+}
+
+function renderAnnouncedPlayers(){
+    const list = document.getElementById('announcedPlayers'); list.innerHTML='';
+    announcedPlayers.forEach(p=>{
+        const div = document.createElement('div'); div.classList.add('player-card');
+        div.innerHTML=`<img src="${p.img}"><div>${p.name} - ${p.status==='pending'?'Pending':p.status}</div>`;
+        if(p.status!=='pending') div.classList.add('sold');
+        list.appendChild(div);
+    });
+}
+
+// Owner Panel
+function showOwnerPanel(player){
+    const panel = document.getElementById('ownersPanel'); panel.innerHTML='';
+    owners.forEach((o,i)=>{
+        const card = document.createElement('div'); card.classList.add('owner-card');
+        card.innerHTML=`<strong>${o.name}</strong><br><button onclick="sellToOwner(${i})">Sold</button>`;
+        panel.appendChild(card);
+    });
+    showScreen('ownerScreen');
+}
+
+// Sold
+function sellToOwner(ownerIndex){
+    const owner = owners[ownerIndex];
+    owner.soldPlayers.push(currentPlayer.name);
+    currentPlayer.status=`Sold to ${owner.name}`;
+    showSoldPopup(`Sold to ${owner.name}`);
+    renderAnnouncedPlayers();
+    setTimeout(()=>{goToNextPlayer();}, 2000);
+}
+
+// Unsold
+function markUnsold(){
+    currentPlayer.status='Unsold';
+    showSoldPopup('Marked Unsold');
+    renderAnnouncedPlayers();
+    setTimeout(()=>{goToNextPlayer();}, 2000);
+}
+
+// Go to next player or announce screen
+function goToNextPlayer(){
+    if(players.length>0){
+        showScreen('announceScreen');
+        renderDropdown();
+    } else {
+        alert('All players processed!');
+        showScreen('announceScreen');
+        renderDropdown();
+    }
+}
+
+// Popup
+function showSoldPopup(message){
+    const popup=document.getElementById('soldPopup'); popup.textContent=message;
+    popup.style.display='block';
+    setTimeout(()=>{popup.style.display='none';},2000);
+}
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
